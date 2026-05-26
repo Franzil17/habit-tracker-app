@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Habit Tracker App</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <h1>Habit Tracker</h1>
+    <p>Track your habits and build consistency</p>
+  </header>
+
+  <main>
+    <section id="add-habit">
+      <h2>Add a New Habit</h2>
+      <form id="habitForm">
+        <input type="text" id="habitName" placeholder="Habit name" required>
+        <select id="habitFrequency">
+          <option value="daily">Daily</option>
+          <option value="weekly">Weekly</option>
+        </select>
+        <button type="submit">Add Habit</button>
+      </form>
+    </section>
+
+    <section id="habit-list">
+      <h2>Your Habits</h2>
+      <ul id="habits"></ul>
+    </section>
+  </main>
+
+  <footer>
+    <p>Made with ❤️ using FastAPI + Vanilla JS</p>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

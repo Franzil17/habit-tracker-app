@@ -34,3 +34,7 @@ habit-tracker-app/
 │   └── app.js
 │── README.md
 │── requirements.txt
+
+![Python](https://img.shields.io/badge/python-3.10-blue)
+![FastAPI](https://img.shields.io/badge/FastAPI-Framework-green)
+![License](https://img.shields.io/badge/license-MIT-yellow)
