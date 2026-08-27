@@ -33,7 +33,8 @@ router.post("/signup", async (req, res) => {
         const hashedPassword = await bcrypt.hash(password, salt);
 
         // Save new user
-        user = new User({ name, email, password: hashedPassword });
+        const todayStr = new Date().toISOString().split("T")[0];
+        user = new User({ name, email, password: hashedPassword, signupDate: todayStr });
         await user.save();
 
         // Issue JWT
@@ -63,7 +64,16 @@ router.post("/signup", async (req, res) => {
             }
         });
 
-        res.status(201).json({ msg: "User registered successfully", token });
+        res.status(201).json({
+            msg: "User registered successfully",
+            token,
+            user: {
+                id: user._id,
+                name: user.name,
+                email: user.email,
+                signupDate: user.signupDate,
+            },
+        });
     } catch (err) {
         console.error(err.message);
         res.status(500).send("Server error");
@@ -90,10 +100,17 @@ router.post("/login", async (req, res) => {
         // Issue JWT
         const token = signToken(user._id);
 
+        const sDate = user.signupDate || (user.createdAt ? user.createdAt.toISOString().split("T")[0] : new Date().toISOString().split("T")[0]);
+
         res.json({
             msg: "Login successful",
             token,
-            user: { id: user._id, name: user.name, email: user.email },
+            user: {
+                id: user._id,
+                name: user.name,
+                email: user.email,
+                signupDate: sDate,
+            },
         });
     } catch (err) {
         console.error(err.message);

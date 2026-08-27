@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import AnimeMascot from "../components/AnimeMascot";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 let _id = 0;
@@ -48,33 +49,68 @@ function Dashboard() {
   const [month,       setMonth]       = useState(now.getMonth());   // 0-indexed
   const [viewMode,    setViewMode]    = useState("month");          // "month" | "week"
   const [weekOffset,  setWeekOffset]  = useState(0);
-  const [habits,      setHabits]      = useState(DEFAULT_HABITS);
-  const [completions, setCompletions] = useState({});               // { "hid_YYYY-MM-DD": true }
-  const [newName,     setNewName]     = useState("");
-  const [editingId,   setEditingId]   = useState(null);
-  const [editName,    setEditName]    = useState("");
-  const [userName,    setUserName]    = useState("Friend");
+  const [habits,      setHabits]      = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("ht_data") || "{}");
+      return saved.habits || DEFAULT_HABITS;
+    } catch {
+      return DEFAULT_HABITS;
+    }
+  });
+  const [completions, setCompletions] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("ht_data") || "{}");
+      return saved.completions || {};
+    } catch {
+      return {};
+    }
+  });
+  const [newName,        setNewName]        = useState("");
+  const [editingId,      setEditingId]      = useState(null);
+  const [editName,       setEditName]       = useState("");
+  const [userName]                          = useState(() => localStorage.getItem("userName") || "Friend");
+  const [signupDate,     setSignupDate]     = useState(() => localStorage.getItem("signupDate") || fmtDate(now));
+  const [triggerMascot,  setTriggerMascot]  = useState(0);
+  const [lockAlert,      setLockAlert]      = useState("");
 
   const doneColor = MONTH_COLORS[month];
   const skipColor = "#1f2937";
 
-  // ── Auth guard ────────────────────────────────────────────────────────────
+  const isBeforeSignup = (date) => fmtDate(date) < signupDate;
+  const isToday = (date) => fmtDate(date) === fmtDate(now);
+
+  // ── Auth guard & MongoDB sync ─────────────────────────────────────────────
   useEffect(() => {
-    if (!localStorage.getItem("token")) { navigate("/login"); return; }
-    const n = localStorage.getItem("userName");
-    if (n) setUserName(n);
+    const token = localStorage.getItem("token");
+    if (!token) { navigate("/login"); return; }
+
+    // Fetch user dashboard info
+    fetch("http://localhost:5000/api/dashboard", {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data?.user?.signupDate) {
+          setSignupDate(data.user.signupDate);
+          localStorage.setItem("signupDate", data.user.signupDate);
+        }
+      })
+      .catch(() => {});
+
+    // Fetch completion logs from MongoDB
+    fetch("http://localhost:5000/api/habits/completions", {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data?.completions) {
+          setCompletions(data.completions);
+        }
+      })
+      .catch(() => {});
   }, [navigate]);
 
-  // ── Persist to localStorage ───────────────────────────────────────────────
-  useEffect(() => {
-    try {
-      const saved = JSON.parse(localStorage.getItem("ht_data") || "{}");
-      if (saved.habits)      setHabits(saved.habits);
-      if (saved.completions) setCompletions(saved.completions);
-    } catch { /* ignore */ }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
+  // ── Persist habits to localStorage ───────────────────────────────────────
   useEffect(() => {
     localStorage.setItem("ht_data", JSON.stringify({ habits, completions }));
   }, [habits, completions]);
@@ -94,20 +130,54 @@ function Dashboard() {
     return d;
   });
 
-  const viewDays  = viewMode === "month" ? monthDays : weekDays;
-  const startDate = viewDays[0];
-  const endDate   = viewDays[viewDays.length - 1];
+  const viewDays = viewMode === "month" ? monthDays : weekDays;
 
   // ── Completion helpers ────────────────────────────────────────────────────
   const key      = (hid, date)  => `${hid}_${fmtDate(date)}`;
   const isDone   = (hid, date)  => !!completions[key(hid, date)];
-  const toggle   = (hid, date)  =>
+  const toggle   = async (hid, hName, date) => {
+    const dateStr = fmtDate(date);
+    if (dateStr < signupDate) {
+      setLockAlert(`🔒 Cannot edit past days before your signup date (${signupDate})!`);
+      setTimeout(() => setLockAlert(""), 4000);
+      return;
+    }
+
+    const k = key(hid, date);
+    const isNowDone = !completions[k];
+
     setCompletions(prev => {
-      const k = key(hid, date);
       const next = { ...prev };
-      next[k] ? delete next[k] : (next[k] = true);
+      isNowDone ? (next[k] = true) : delete next[k];
       return next;
     });
+
+    if (isNowDone) {
+      setTriggerMascot(prev => prev + 1);
+    }
+
+    // Sync status change to backend MongoDB database
+    try {
+      const token = localStorage.getItem("token");
+      if (token) {
+        await fetch("http://localhost:5000/api/habits/toggle", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            habitId: hid,
+            habitName: hName,
+            date: dateStr,
+            status: isNowDone ? "completed" : "missed",
+          }),
+        });
+      }
+    } catch (err) {
+      console.error("Error syncing habit toggle:", err);
+    }
+  };
 
   const habitCount = (h) => viewDays.filter(d => isDone(h.id, d)).length;
   const habitPct   = (h) => viewDays.length ? Math.round((habitCount(h) / viewDays.length) * 100) : 0;
@@ -149,13 +219,26 @@ function Dashboard() {
           const date  = new Date(year, month, dayNum);
           const total = dayTotal(date);
           const pct   = habits.length ? total / habits.length : 0;
-          const bg    = total === 0 ? skipColor
+          const locked = isBeforeSignup(date);
+          const itIsToday = isToday(date);
+          const bg    = locked ? "rgba(255,255,255,0.02)" : (total === 0 ? skipColor
             : pct === 1 ? doneColor
-            : `${doneColor}${Math.round(pct * 155 + 100).toString(16).padStart(2, "0")}`;
+            : `${doneColor}${Math.round(pct * 155 + 100).toString(16).padStart(2, "0")}`);
           return (
-            <div key={dayNum} className="hd-cal-cell" style={{ background: bg }} title={`${total}/${habits.length} habits`}>
+            <div
+              key={dayNum}
+              className={`hd-cal-cell${locked ? " disabled-day" : ""}${itIsToday ? " today-cell" : ""}`}
+              style={{
+                background: bg,
+                border: itIsToday ? "2px solid #f472b6" : undefined,
+                boxShadow: itIsToday ? "0 0 12px rgba(244,114,182,0.6)" : undefined,
+              }}
+              title={itIsToday ? `Today (${fmtDate(date)})` : (locked ? `Locked: prior to signup date (${signupDate})` : `${total}/${habits.length} habits`)}
+            >
               <span className="hd-cal-num">{dayNum}</span>
-              {total > 0 && <span className="hd-cal-badge">{total}</span>}
+              {itIsToday && <span className="hd-today-badge">TODAY</span>}
+              {total > 0 && !locked && !itIsToday && <span className="hd-cal-badge">{total}</span>}
+              {locked && <span style={{ fontSize: "9px" }}>🔒</span>}
             </div>
           );
         })}
@@ -169,17 +252,21 @@ function Dashboard() {
         const total  = dayTotal(day);
         const pct    = habits.length ? total / habits.length : 0;
         const inMon  = day.getMonth() === month;
-        const bg     = total === 0 ? skipColor
+        const locked = isBeforeSignup(day);
+        const itIsToday = isToday(day);
+        const bg     = locked ? "rgba(255,255,255,0.02)" : (total === 0 ? skipColor
           : pct === 1 ? doneColor
-          : `${doneColor}${Math.round(pct * 155 + 100).toString(16).padStart(2, "0")}`;
+          : `${doneColor}${Math.round(pct * 155 + 100).toString(16).padStart(2, "0")}`);
         return (
-          <div key={fmtDate(day)} className={`hd-week-day${inMon ? "" : " dim"}`}>
-            <div className="hd-week-dayname">{DAY_SHORT[day.getDay()]}</div>
-            <div className="hd-week-circle" style={{ background: bg }}>
-              {day.getDate()}
+          <div key={fmtDate(day)} className={`hd-week-day${inMon ? "" : " dim"}${locked ? " disabled-day" : ""}${itIsToday ? " today-cell" : ""}`}>
+            <div className="hd-week-dayname" style={{ color: itIsToday ? "#f472b6" : undefined }}>
+              {DAY_SHORT[day.getDay()]} {itIsToday ? "★" : ""}
             </div>
-            <div className="hd-week-count" style={{ color: total > 0 ? doneColor : "#6b7280" }}>
-              {total}/{habits.length}
+            <div className="hd-week-circle" style={{ background: bg, border: itIsToday ? "2px solid #f472b6" : undefined }}>
+              {locked ? "🔒" : day.getDate()}
+            </div>
+            <div className="hd-week-count" style={{ color: total > 0 && !locked ? doneColor : "#6b7280" }}>
+              {locked ? "Locked" : `${total}/${habits.length}`}
             </div>
           </div>
         );
@@ -249,8 +336,8 @@ function Dashboard() {
       {/* ── Top Header ───────────────────────────────────────────────────── */}
       <header className="hd-topbar">
         <div className="hd-topbar-logo">
-          <span className="hd-logo-icon">🎯</span>
-          HabitTracker
+          <span className="hd-logo-icon">🌸</span>
+          HabitTracker <span style={{ fontSize: "12px", color: "#f472b6", fontWeight: "700" }}>Anime Edition</span>
         </div>
         <div className="hd-topbar-right">
           <div className="hd-avatar">{userName.charAt(0).toUpperCase()}</div>
@@ -260,6 +347,16 @@ function Dashboard() {
       </header>
 
       <div className="hd-body">
+
+        {/* ── Lock Alert Banner ────────────────────────────────────────────── */}
+        {lockAlert && (
+          <div className="hd-date-locked-banner">
+            {lockAlert}
+          </div>
+        )}
+
+        {/* ── Anime Mascot Section ─────────────────────────────────────────── */}
+        <AnimeMascot triggerEvent={triggerMascot} completedCount={dayTotal(now)} />
 
         {/* ── Control Bar ──────────────────────────────────────────────────── */}
         <section className="hd-controls">
@@ -304,18 +401,26 @@ function Dashboard() {
             )}
 
             <div className="hd-ctrl-group">
-              <label className="hd-lbl">Start</label>
-              <div className="hd-info-pill">{fmtDate(startDate)}</div>
+              <label className="hd-lbl">Quick Jump</label>
+              <button
+                id="btn-go-today"
+                className="hd-add-btn"
+                style={{ height: "36px", padding: "0 14px", fontSize: "12px", background: "linear-gradient(135deg,#ec4899,#8b5cf6)" }}
+                onClick={() => {
+                  const today = new Date();
+                  setYear(today.getFullYear());
+                  setMonth(today.getMonth());
+                  setWeekOffset(0);
+                }}
+                title={`Jump to Today (${fmtDate(now)})`}
+              >
+                📍 Today
+              </button>
             </div>
 
             <div className="hd-ctrl-group">
-              <label className="hd-lbl">End</label>
-              <div className="hd-info-pill">{fmtDate(endDate)}</div>
-            </div>
-
-            <div className="hd-ctrl-group">
-              <label className="hd-lbl">Days</label>
-              <div className="hd-info-pill hd-pill-accent">{viewDays.length}</div>
+              <label className="hd-lbl">Signup Date 🔒</label>
+              <div className="hd-info-pill hd-pill-accent">{signupDate}</div>
             </div>
 
             <div className="hd-ctrl-group">
@@ -415,6 +520,10 @@ function Dashboard() {
                   <span className="hd-legend-dot" style={{ background: skipColor }} />
                   <span>Incomplete</span>
                 </div>
+                <div className="hd-legend-item">
+                  <span className="hd-legend-dot" style={{ background: "rgba(255,255,255,0.05)" }}>🔒</span>
+                  <span>Locked</span>
+                </div>
               </div>
             </div>
             {viewMode === "month" ? renderMonthCalendar() : renderWeekCalendar()}
@@ -427,21 +536,25 @@ function Dashboard() {
             <h2 className="hd-sec-title">
               📊 Habit Grid — {viewMode === "month" ? MONTH_NAMES[month] : `Week ${weekOffset + 1}`} {year}
             </h2>
-            <span className="hd-sec-sub">Click checkboxes to toggle</span>
+            <span className="hd-sec-sub">Click checkboxes to toggle (Days prior to signup date are locked)</span>
           </div>
           <div className="hd-grid-scroll">
             <table className="hd-grid">
               <thead>
                 <tr>
                   <th className="hd-gh-habit">Habit</th>
-                  {viewDays.map(day => (
-                    <th key={fmtDate(day)} className="hd-gh-day">
-                      <div className="hd-gh-dn">{DAY_SHORT[day.getDay()]}</div>
-                      <div className={`hd-gh-num${day.getMonth() !== month ? " dim" : ""}`}>
-                        {day.getDate()}
-                      </div>
-                    </th>
-                  ))}
+                  {viewDays.map(day => {
+                    const itIsToday = isToday(day);
+                    return (
+                      <th key={fmtDate(day)} className={`hd-gh-day${itIsToday ? " today-col" : ""}`}>
+                        <div className="hd-gh-dn" style={{ color: itIsToday ? "#f472b6" : undefined }}>{DAY_SHORT[day.getDay()]}</div>
+                        <div className={`hd-gh-num${day.getMonth() !== month ? " dim" : ""}${itIsToday ? " today-num" : ""}`}>
+                          {isBeforeSignup(day) ? "🔒" : day.getDate()}
+                        </div>
+                        {itIsToday && <div className="hd-grid-today-tag">TODAY</div>}
+                      </th>
+                    );
+                  })}
                   <th className="hd-gh-sum">Total</th>
                   <th className="hd-gh-pct">%</th>
                 </tr>
@@ -452,17 +565,20 @@ function Dashboard() {
                     <td className="hd-gd-habit">{h.name}</td>
                     {viewDays.map(day => {
                       const done = isDone(h.id, day);
+                      const disabled = isBeforeSignup(day);
+                      const itIsToday = isToday(day);
                       return (
-                        <td key={fmtDate(day)} className="hd-gd-cell">
-                          <label className="hd-cb-wrap" title={`${h.name} – ${fmtDate(day)}`}>
+                        <td key={fmtDate(day)} className={`hd-gd-cell${itIsToday ? " today-cell" : ""}`}>
+                          <label className={`hd-cb-wrap${disabled ? " disabled" : ""}`} title={disabled ? `Locked: prior to signup date (${signupDate})` : `${h.name} – ${fmtDate(day)}`}>
                             <input type="checkbox" className="hd-cb-native"
                               checked={done}
-                              onChange={() => toggle(h.id, day)}
+                              disabled={disabled}
+                              onChange={() => toggle(h.id, h.name, day)}
                               id={`cb_${h.id}_${fmtDate(day)}`} />
-                            <span className="hd-cb-box"
+                            <span className={`hd-cb-box${disabled ? " locked" : ""}`}
                               style={{
-                                background: done ? doneColor : "transparent",
-                                borderColor: done ? doneColor : "#374151",
+                                background: done && !disabled ? doneColor : "transparent",
+                                borderColor: done && !disabled ? doneColor : (itIsToday ? "#f472b6" : "#374151"),
                               }} />
                           </label>
                         </td>
@@ -478,15 +594,16 @@ function Dashboard() {
                   <td className="hd-gd-habit hd-totals-label">Daily Total</td>
                   {viewDays.map(day => {
                     const t = dayTotal(day);
+                    const locked = isBeforeSignup(day);
                     return (
                       <td key={fmtDate(day)} className="hd-gd-cell hd-total-cell"
-                        style={{ color: t > 0 ? doneColor : "#4b5563", fontWeight: t > 0 ? 700 : 400 }}>
-                        {t}
+                        style={{ color: t > 0 && !locked ? doneColor : "#4b5563", fontWeight: t > 0 ? 700 : 400 }}>
+                        {locked ? "-" : t}
                       </td>
                     );
                   })}
                   <td className="hd-gd-sum" style={{ color: doneColor }}>
-                    {viewDays.reduce((s, d) => s + dayTotal(d), 0)}
+                    {viewDays.reduce((s, d) => s + (isBeforeSignup(d) ? 0 : dayTotal(d)), 0)}
                   </td>
                   <td className="hd-gd-pct" />
                 </tr>

@@ -7,6 +7,7 @@ const cors = require("cors");
 
 const authRoutes = require("./routes/auth");
 const dashboardRoutes = require("./routes/dashboard");
+const habitsRoutes = require("./routes/habits");
 
 const app = express();
 
@@ -20,6 +21,7 @@ app.use(express.json());
 // ─── Routes ───────────────────────────────────────────────────────────────────
 app.use("/api/auth", authRoutes);
 app.use("/api/dashboard", dashboardRoutes);
+app.use("/api/habits", habitsRoutes);
 
 // Health check
 app.get("/", (req, res) => res.json({ msg: "Habit Tracker API is running" }));

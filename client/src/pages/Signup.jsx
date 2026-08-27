@@ -53,6 +53,8 @@ function Signup() {
                 setApiMsg({ type: "error", text: data.msg || "Signup failed. Try again." });
             } else {
                 localStorage.setItem("token", data.token);
+                if (data.user?.name) localStorage.setItem("userName", data.user.name);
+                if (data.user?.signupDate) localStorage.setItem("signupDate", data.user.signupDate);
                 setApiMsg({ type: "success", text: "Account created! Redirecting…" });
                 setTimeout(() => navigate("/dashboard"), 800);
             }

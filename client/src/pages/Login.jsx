@@ -49,6 +49,7 @@ function Login() {
             } else {
                 localStorage.setItem("token", data.token);
                 if (data.user?.name) localStorage.setItem("userName", data.user.name);
+                if (data.user?.signupDate) localStorage.setItem("signupDate", data.user.signupDate);
                 setApiMsg({ type: "success", text: `Welcome back! Redirecting…` });
                 setTimeout(() => navigate("/dashboard"), 700);
             }
