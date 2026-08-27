@@ -16,6 +16,20 @@ const MONTH_NAMES = [
   "January","February","March","April","May","June",
   "July","August","September","October","November","December",
 ];
+const MONTH_COLORS = [
+  "#3b82f6", // Jan: Blue
+  "#ec4899", // Feb: Pink
+  "#10b981", // Mar: Emerald
+  "#8b5cf6", // Apr: Purple
+  "#f59e0b", // May: Amber
+  "#06b6d4", // Jun: Cyan
+  "#ef4444", // Jul: Red
+  "#14b8a6", // Aug: Teal
+  "#f97316", // Sep: Orange
+  "#e11d48", // Oct: Rose
+  "#6366f1", // Nov: Indigo
+  "#059669", // Dec: Green
+];
 const DAY_SHORT = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 
 const DEFAULT_HABITS = [
@@ -39,9 +53,10 @@ function Dashboard() {
   const [newName,     setNewName]     = useState("");
   const [editingId,   setEditingId]   = useState(null);
   const [editName,    setEditName]    = useState("");
-  const [doneColor,   setDoneColor]   = useState("#3b82f6");
-  const [skipColor,   setSkipColor]   = useState("#1f2937");
   const [userName,    setUserName]    = useState("Friend");
+
+  const doneColor = MONTH_COLORS[month];
+  const skipColor = "#1f2937";
 
   // ── Auth guard ────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -56,15 +71,13 @@ function Dashboard() {
       const saved = JSON.parse(localStorage.getItem("ht_data") || "{}");
       if (saved.habits)      setHabits(saved.habits);
       if (saved.completions) setCompletions(saved.completions);
-      if (saved.doneColor)   setDoneColor(saved.doneColor);
-      if (saved.skipColor)   setSkipColor(saved.skipColor);
     } catch { /* ignore */ }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    localStorage.setItem("ht_data", JSON.stringify({ habits, completions, doneColor, skipColor }));
-  }, [habits, completions, doneColor, skipColor]);
+    localStorage.setItem("ht_data", JSON.stringify({ habits, completions }));
+  }, [habits, completions]);
 
   // ── Derived date ranges ───────────────────────────────────────────────────
   const daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -306,15 +319,21 @@ function Dashboard() {
             </div>
 
             <div className="hd-ctrl-group">
-              <label className="hd-lbl" htmlFor="color-done">✅ Color</label>
-              <input id="color-done" type="color" className="hd-color-pick"
-                value={doneColor} onChange={e => setDoneColor(e.target.value)} />
-            </div>
-
-            <div className="hd-ctrl-group">
-              <label className="hd-lbl" htmlFor="color-skip">☐ Color</label>
-              <input id="color-skip" type="color" className="hd-color-pick"
-                value={skipColor} onChange={e => setSkipColor(e.target.value)} />
+              <label className="hd-lbl">Monthly Palette</label>
+              <div className="hd-month-color-boxes">
+                {MONTH_COLORS.map((col, idx) => (
+                  <div
+                    key={idx}
+                    id={`month-color-${idx}`}
+                    className={`hd-month-color-box${idx === month ? " active" : ""}`}
+                    style={{ backgroundColor: col }}
+                    onClick={() => { setMonth(idx); setWeekOffset(0); }}
+                    title={`${MONTH_NAMES[idx]}: ${col}`}
+                  >
+                    {idx === month && <span className="hd-checkmark">✓</span>}
+                  </div>
+                ))}
+              </div>
             </div>
 
           </div>
