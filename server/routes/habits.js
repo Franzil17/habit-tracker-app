@@ -35,15 +35,6 @@ router.post("/toggle", authMiddleware, async (req, res) => {
         const user = await User.findById(req.user.id);
         if (!user) return res.status(404).json({ msg: "User not found" });
 
-        const userSignupDate = user.signupDate || (user.createdAt ? user.createdAt.toISOString().split("T")[0] : "2000-01-01");
-
-        // Restrict editing prior to user's signupDate
-        if (date < userSignupDate) {
-            return res.status(400).json({
-                msg: `Cannot edit habit completion prior to signup date (${userSignupDate})`,
-            });
-        }
-
         if (status === "completed") {
             const updated = await HabitLog.findOneAndUpdate(
                 { userId: req.user.id, habitId, date },

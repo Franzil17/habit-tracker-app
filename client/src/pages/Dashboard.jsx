@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import AnimeMascot from "../components/AnimeMascot";
+import Navbar from "../components/Navbar";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 let _id = 0;
@@ -76,7 +77,7 @@ function Dashboard() {
   const doneColor = MONTH_COLORS[month];
   const skipColor = "#1f2937";
 
-  const isBeforeSignup = (date) => fmtDate(date) < signupDate;
+  const isBeforeSignup = () => false;
   const isToday = (date) => fmtDate(date) === fmtDate(now);
 
   // ── Auth guard & MongoDB sync ─────────────────────────────────────────────
@@ -137,12 +138,6 @@ function Dashboard() {
   const isDone   = (hid, date)  => !!completions[key(hid, date)];
   const toggle   = async (hid, hName, date) => {
     const dateStr = fmtDate(date);
-    if (dateStr < signupDate) {
-      setLockAlert(`🔒 Cannot edit past days before your signup date (${signupDate})!`);
-      setTimeout(() => setLockAlert(""), 4000);
-      return;
-    }
-
     const k = key(hid, date);
     const isNowDone = !completions[k];
 
@@ -227,18 +222,17 @@ function Dashboard() {
           return (
             <div
               key={dayNum}
-              className={`hd-cal-cell${locked ? " disabled-day" : ""}${itIsToday ? " today-cell" : ""}`}
+              className={`hd-cal-cell${itIsToday ? " today-cell" : ""}`}
               style={{
                 background: bg,
                 border: itIsToday ? "2px solid #f472b6" : undefined,
                 boxShadow: itIsToday ? "0 0 12px rgba(244,114,182,0.6)" : undefined,
               }}
-              title={itIsToday ? `Today (${fmtDate(date)})` : (locked ? `Locked: prior to signup date (${signupDate})` : `${total}/${habits.length} habits`)}
+              title={itIsToday ? `Today (${fmtDate(date)})` : `${total}/${habits.length} habits`}
             >
               <span className="hd-cal-num">{dayNum}</span>
               {itIsToday && <span className="hd-today-badge">TODAY</span>}
-              {total > 0 && !locked && !itIsToday && <span className="hd-cal-badge">{total}</span>}
-              {locked && <span style={{ fontSize: "9px" }}>🔒</span>}
+              {total > 0 && !itIsToday && <span className="hd-cal-badge">{total}</span>}
             </div>
           );
         })}
@@ -333,18 +327,8 @@ function Dashboard() {
   return (
     <div className="hd-root">
 
-      {/* ── Top Header ───────────────────────────────────────────────────── */}
-      <header className="hd-topbar">
-        <div className="hd-topbar-logo">
-          <span className="hd-logo-icon">🌸</span>
-          HabitTracker <span style={{ fontSize: "12px", color: "#f472b6", fontWeight: "700" }}>Anime Edition</span>
-        </div>
-        <div className="hd-topbar-right">
-          <div className="hd-avatar">{userName.charAt(0).toUpperCase()}</div>
-          <span className="hd-uname">{userName}</span>
-          <button id="logout-btn" className="hd-btn-logout" onClick={logout}>Logout</button>
-        </div>
-      </header>
+      {/* ── Navigation Topbar ────────────────────────────────────────────── */}
+      <Navbar userName={userName} />
 
       <div className="hd-body">
 
@@ -419,27 +403,10 @@ function Dashboard() {
             </div>
 
             <div className="hd-ctrl-group">
-              <label className="hd-lbl">Signup Date 🔒</label>
+              <label className="hd-lbl">Signup Date</label>
               <div className="hd-info-pill hd-pill-accent">{signupDate}</div>
             </div>
 
-            <div className="hd-ctrl-group">
-              <label className="hd-lbl">Monthly Palette</label>
-              <div className="hd-month-color-boxes">
-                {MONTH_COLORS.map((col, idx) => (
-                  <div
-                    key={idx}
-                    id={`month-color-${idx}`}
-                    className={`hd-month-color-box${idx === month ? " active" : ""}`}
-                    style={{ backgroundColor: col }}
-                    onClick={() => { setMonth(idx); setWeekOffset(0); }}
-                    title={`${MONTH_NAMES[idx]}: ${col}`}
-                  >
-                    {idx === month && <span className="hd-checkmark">✓</span>}
-                  </div>
-                ))}
-              </div>
-            </div>
 
           </div>
         </section>
@@ -536,7 +503,7 @@ function Dashboard() {
             <h2 className="hd-sec-title">
               📊 Habit Grid — {viewMode === "month" ? MONTH_NAMES[month] : `Week ${weekOffset + 1}`} {year}
             </h2>
-            <span className="hd-sec-sub">Click checkboxes to toggle (Days prior to signup date are locked)</span>
+            <span className="hd-sec-sub">Click checkboxes to toggle habits for any day</span>
           </div>
           <div className="hd-grid-scroll">
             <table className="hd-grid">
@@ -549,7 +516,7 @@ function Dashboard() {
                       <th key={fmtDate(day)} className={`hd-gh-day${itIsToday ? " today-col" : ""}`}>
                         <div className="hd-gh-dn" style={{ color: itIsToday ? "#f472b6" : undefined }}>{DAY_SHORT[day.getDay()]}</div>
                         <div className={`hd-gh-num${day.getMonth() !== month ? " dim" : ""}${itIsToday ? " today-num" : ""}`}>
-                          {isBeforeSignup(day) ? "🔒" : day.getDate()}
+                          {day.getDate()}
                         </div>
                         {itIsToday && <div className="hd-grid-today-tag">TODAY</div>}
                       </th>
@@ -565,20 +532,18 @@ function Dashboard() {
                     <td className="hd-gd-habit">{h.name}</td>
                     {viewDays.map(day => {
                       const done = isDone(h.id, day);
-                      const disabled = isBeforeSignup(day);
                       const itIsToday = isToday(day);
                       return (
                         <td key={fmtDate(day)} className={`hd-gd-cell${itIsToday ? " today-cell" : ""}`}>
-                          <label className={`hd-cb-wrap${disabled ? " disabled" : ""}`} title={disabled ? `Locked: prior to signup date (${signupDate})` : `${h.name} – ${fmtDate(day)}`}>
+                          <label className="hd-cb-wrap" title={`${h.name} – ${fmtDate(day)}`}>
                             <input type="checkbox" className="hd-cb-native"
                               checked={done}
-                              disabled={disabled}
                               onChange={() => toggle(h.id, h.name, day)}
                               id={`cb_${h.id}_${fmtDate(day)}`} />
-                            <span className={`hd-cb-box${disabled ? " locked" : ""}`}
+                            <span className="hd-cb-box"
                               style={{
-                                background: done && !disabled ? doneColor : "transparent",
-                                borderColor: done && !disabled ? doneColor : (itIsToday ? "#f472b6" : "#374151"),
+                                background: done ? doneColor : "transparent",
+                                borderColor: done ? doneColor : (itIsToday ? "#f472b6" : "#374151"),
                               }} />
                           </label>
                         </td>
